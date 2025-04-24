@@ -6,7 +6,10 @@ authors = ["Wilkne Maia <72803395+wilkneMaia@users.noreply.github.com>"]
 readme = "README.md"
 
 [tool.poetry.dependencies]
-python = "^3.12"
+python = "^3.11"
+pandas = "^2.2.3"
+python-dotenv = "^1.1.0"
+pyspark = "^3.5.5"
 
 
 [tool.poetry.group.dev.dependencies]
