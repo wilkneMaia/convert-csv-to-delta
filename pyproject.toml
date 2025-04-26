@@ -40,7 +40,7 @@ myst-parser = "^4.0.1"
 [tool.ruff]
 line-length = 88
 target-version = "py311"
-exclude = [".venv", "migrations", "__pycache__"]
+exclude = [".venv", "migrations", "__pycache__", "tests"]
 
 # Configurações de linting
 [tool.ruff.lint]
@@ -107,6 +107,9 @@ filterwarnings = [
 ]
 
 [tool.taskipy.tasks]
+# --- Linting e Formatação ---
+lint = "ruff check . && black --check . && isort --check ."
+
 # --- Análise de Código ---
 format-check = """
     ruff check . &&
@@ -115,26 +118,28 @@ format-check = """
     mypy --strict --show-error-codes src
 """
 
+# Esta task irá reformatar automaticamente o código Python,
+# quebrando linhas longas e ajustando a tabulação conforme o padrão Black.
 format-fix = """
     # 1. Remove imports não utilizados
     autoflake --remove-all-unused-imports --remove-unused-variables --recursive --in-place src
 
     # 2. Organiza imports
-    isort src
+    isort .
 
-    # 3. Formatação padrão
-    black src
+    # 3. Formatação padrão (quebra linhas longas e ajusta tabulação)
+    black .
 
     # 4. Correções automáticas do Ruff (com fallback)
-    ruff check --fix --exit-zero src || echo "Ruff fix completed with warnings"
+    ruff check --fix --exit-zero . || echo "Ruff fix completed with warnings"
 """
+
 audit = "safety check && bandit -r src"
 
 # --- Testes ---
 test = "pytest -x --cov=src --cov-report=term-missing"
 test-ci = "pytest -x --cov=src --cov-report=xml"
 test-watch = "ptw -- -x --cov=src"
-
 
 # --- Utilitários ---
 clean = """
@@ -143,6 +148,12 @@ clean = """
     rm -rf .coverage .mypy_cache .pytest_cache .ruff_cache .tox .venv
 """
 docs = "pdoc src -o docs --force"
+install = "poetry install && pre-commit install"
+update = "poetry update && pre-commit autoupdate"
+
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["S101", "D"]
 
 [build-system]
 requires = ["poetry-core"]

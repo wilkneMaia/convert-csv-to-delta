@@ -1,16 +1,16 @@
-import os
-import time
 import logging
+import os
 import sys
-from typing import Optional
-from pyspark.sql import SparkSession
+import time
+
 from py4j.protocol import Py4JJavaError
+from pyspark.sql import SparkSession
 
 # Configuração básica do logging
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(message)s",
-    datefmt="%Y-%m-%d %H:%M:%S"
+    datefmt="%Y-%m-%d %H:%M:%S",
 )
 
 # Caminhos relativos para os arquivos
@@ -35,8 +35,8 @@ def convert_csv_to_parquet(
     parquet_file_path: str,
     compression: str = "snappy",
     overwrite: bool = True,
-    n_partitions: int = 1
-) -> Optional[float]:
+    n_partitions: int = 1,
+) -> float | None:
     """
     Converte um arquivo CSV em Parquet com compressão usando PySpark.
 
@@ -50,7 +50,7 @@ def convert_csv_to_parquet(
     Returns:
         Optional[float]: Tempo de execução em segundos ou None em caso de falha.
     """
-    spark: Optional[SparkSession] = None
+    spark: SparkSession | None = None
 
     try:
         # Validação inicial
@@ -63,10 +63,11 @@ def convert_csv_to_parquet(
         os.makedirs(parquet_dir, exist_ok=True)
 
         # Configuração do Spark
-        spark = SparkSession.builder \
-            .appName("CSV to Parquet") \
-            .config("mapreduce.fileoutputcommitter.marksuccessfuljobs", "false") \
+        spark = (
+            SparkSession.builder.appName("CSV to Parquet")
+            .config("mapreduce.fileoutputcommitter.marksuccessfuljobs", "false")
             .getOrCreate()
+        )
 
         # Leitura do CSV
         logging.info("Iniciando leitura do CSV: %s", csv_file_path)
@@ -80,18 +81,18 @@ def convert_csv_to_parquet(
         if overwrite:
             writer = writer.mode("overwrite")
 
-        writer \
-            .option("compression", compression) \
-            .parquet(parquet_file_path)
+        writer.option("compression", compression).parquet(parquet_file_path)
 
         # Cálculo de métricas
         end_time = time.time()
         elapsed_time = end_time - start_time
 
         original_size = os.path.getsize(csv_file_path)
-        compressed_size = get_directory_size(parquet_file_path) \
-            if os.path.isdir(parquet_file_path) \
+        compressed_size = (
+            get_directory_size(parquet_file_path)
+            if os.path.isdir(parquet_file_path)
             else os.path.getsize(parquet_file_path)
+        )
 
         if compressed_size <= 0:
             logging.error("Falha ao calcular tamanho do Parquet")
@@ -134,7 +135,7 @@ def main():
         parquet_file_path=PARQUET_PATH,
         compression="snappy",
         n_partitions=1,
-        overwrite=True
+        overwrite=True,
     )
 
     if time_elapsed is not None:
