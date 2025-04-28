@@ -3,7 +3,7 @@ import os
 import sys
 import time
 
-from py4j.protocol import Py4JJavaError
+from pyspark.errors import AnalysisException, PySparkException
 from pyspark.sql import SparkSession
 
 # Configuração básica do logging
@@ -117,8 +117,11 @@ def convert_csv_to_parquet(
     except PermissionError as e:
         logging.error("Erro de permissão: %s", str(e))
         sys.exit(1)
-    except Py4JJavaError as e:
-        logging.error("Erro na JVM/Spark: %s", str(e.java_exception))
+    except PySparkException as e:
+        logging.error("Erro do PySpark: %s", str(e))
+        return None
+    except AnalysisException as e:
+        logging.error("Erro de análise no Spark: %s", str(e))
         return None
     except Exception as e:
         logging.error("Erro não esperado: %s", str(e), exc_info=True)
