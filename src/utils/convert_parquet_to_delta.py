@@ -1,94 +1,109 @@
 import logging
 import os
-import sys
+import re
 import time
 import unicodedata
 
-from pyspark.errors import PySparkException
 from pyspark.sql import SparkSession
-from pyspark.sql.utils import AnalysisException
-
-
-def sanitize_column_name(name: str) -> str:
-    """Remove acentos e caracteres especiais, substituindo por underscore."""
-    name = unicodedata.normalize("NFKD", name).encode("ASCII", "ignore").decode("ASCII")
-    import re
-
-    return re.sub(r"\W+", "_", name).strip("_")
 
 
 def convert_csv_to_delta(
     csv_file_path: str,
-    delta_table_path: str,
+    delta_table_path: str | None = None,
     overwrite: bool = True,
     n_partitions: int = 1,
+    compression: str = "snappy",
 ) -> float | None:
     """
-    Converte um CSV para Delta Lake, permitindo operações CRUD.
+    Converte CSV para Delta Lake mantendo nome original com extensão .parquet.
 
     Args:
-        csv_file_path (str): Caminho do arquivo CSV.
-        delta_table_path (str): Caminho da tabela Delta.
-        overwrite (bool): Sobrescrever tabela existente.
-        n_partitions (int): Número de partições de saída.
-
-    Returns:
-        Optional[float]: Tempo de execução em segundos ou None em caso de falha.
+        csv_file_path (str): Caminho completo do arquivo CSV de entrada
+        delta_table_path (str, optional): Caminho de saída. Se não informado, será gerado no mesmo diretório do CSV com extensão .parquet
+        overwrite (bool): Sobrescrever tabela existente (padrão: True)
+        n_partitions (int): Número de partições (padrão: 1)
+        compression (str): Tipo de compressão (snappy, gzip, etc) (padrão: snappy)
     """
     spark: SparkSession | None = None
 
     try:
-        # Validação inicial
-        if not os.path.exists(csv_file_path):
-            logging.error("Arquivo CSV não encontrado: %s", csv_file_path)
-            return None
+        # Gerar caminho de saída automático se não informado
+        if delta_table_path is None:
+            base_dir = os.path.dirname(csv_file_path)
+            csv_name = os.path.splitext(os.path.basename(csv_file_path))[0]
+            delta_table_path = os.path.join(base_dir, f"{csv_name}.parquet")
 
-        # Configuração do Spark para Delta Lake
+        # Preparação de diretórios
+        os.makedirs(os.path.dirname(delta_table_path), exist_ok=True)
+
+        # Configuração do Spark
         spark = (
-            SparkSession.builder.appName("CSV to Delta")
+            SparkSession.builder.appName("CSV to Delta Converter")
             .config("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension")
             .config(
                 "spark.sql.catalog.spark_catalog",
                 "org.apache.spark.sql.delta.catalog.DeltaCatalog",
             )
             .config("spark.jars.packages", "io.delta:delta-spark_2.12:3.3.1")
+            .config("spark.sql.parquet.compression.codec", compression.lower())
             .getOrCreate()
         )
 
         # Leitura do CSV
-        logging.info("Lendo CSV: %s", csv_file_path)
         df = spark.read.csv(csv_file_path, header=True, inferSchema=True)
 
-        # Sanitizar nomes das colunas
-        for old_name in df.columns:
-            new_name = sanitize_column_name(old_name)
-            df = df.withColumnRenamed(old_name, new_name)
+        # Sanitização de colunas em lote
+        sanitized_cols = [
+            re.sub(
+                r"\W+",
+                "_",
+                unicodedata.normalize("NFKD", c)
+                .encode("ASCII", "ignore")
+                .decode("ASCII"),
+            ).strip("_")
+            for c in df.columns
+        ]
+        df = df.toDF(*sanitized_cols)
 
-        # Escrita como Delta Lake
+        # Escrita com compressão configurável
         start_time = time.time()
-        logging.info("Convertendo para Delta Lake...")
+        logging.info(f"Iniciando conversão para: {delta_table_path}")
 
-        writer = df.repartition(n_partitions).write.format("delta")
+        writer = (
+            df.repartition(n_partitions)
+            .write.format("delta")
+            .option("compression", compression.lower())
+        )
         if overwrite:
-            writer = writer.mode("overwrite")
+            writer.mode("overwrite")
 
         writer.save(delta_table_path)
 
-        # Tempo de execução
-        elapsed_time = time.time() - start_time
-        logging.info("Conversão concluída em %.2f segundos.", elapsed_time)
+        # Cálculo de métricas
+        end_time = time.time()
+        elapsed_time = end_time - start_time
+        original_size = os.path.getsize(csv_file_path)
+        compressed_size = sum(
+            f.stat().st_size for f in os.scandir(delta_table_path) if f.is_file()
+        )
 
+        logging.info(
+            "Conversão concluída!\n"
+            f"CSV: {original_size / 1e6:.2f} MB → Delta: {compressed_size / 1e6:.2f} MB\n"
+            f"Tempo: {elapsed_time:.2f}s | Compressão: {compression_ratio(original_size, compressed_size):.1f}x"
+        )
         return elapsed_time
 
     except PermissionError as e:
-        logging.error("Erro de permissão: %s", str(e))
-        sys.exit(1)
-    except (PySparkException, AnalysisException) as e:
-        logging.error("Erro do Spark: %s", str(e))
+        logging.error(f"Erro de permissão: {e!s}")
         return None
     except Exception as e:
-        logging.error("Erro inesperado: %s", str(e), exc_info=True)
+        logging.error(f"Erro na conversão: {e!s}", exc_info=True)
         return None
     finally:
         if spark:
             spark.stop()
+
+
+def compression_ratio(original: int, compressed: int) -> float:
+    return original / compressed if compressed > 0 else 0.0
