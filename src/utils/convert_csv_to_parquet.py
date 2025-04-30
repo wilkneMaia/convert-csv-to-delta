@@ -2,9 +2,11 @@ import logging
 import os
 import sys
 import time
+import unicodedata
 
 from pyspark.errors import AnalysisException, PySparkException
 from pyspark.sql import SparkSession
+from pyspark.sql.utils import AnalysisException
 
 # Configuração básica do logging
 logging.basicConfig(
@@ -25,6 +27,14 @@ def get_directory_size(path: str) -> int:
     return total
 
 
+def sanitize_column_name(name: str) -> str:
+
+    name = unicodedata.normalize("NFKD", name).encode("ASCII", "ignore").decode("ASCII")
+    import re
+
+    return re.sub(r"\W+", "_", name).strip("_")
+
+
 def convert_csv_to_parquet(
     csv_file_path: str,
     parquet_file_path: str,
@@ -34,16 +44,7 @@ def convert_csv_to_parquet(
 ) -> float | None:
     """
     Converte um arquivo CSV em Parquet com compressão usando PySpark.
-
-    Args:
-        csv_file_path (str): Caminho do arquivo CSV.
-        parquet_file_path (str): Caminho de saída do Parquet.
-        compression (str): Tipo de compressão (snappy, gzip, etc).
-        overwrite (bool): Sobrescrever arquivo existente.
-        n_partitions (int): Número de partições de saída.
-
-    Returns:
-        Optional[float]: Tempo de execução em segundos ou None em caso de falha.
+    Renomeia as colunas para nomes compatíveis.
     """
     spark: SparkSession | None = None
 
@@ -61,12 +62,22 @@ def convert_csv_to_parquet(
         spark = (
             SparkSession.builder.appName("CSV to Parquet")
             .config("mapreduce.fileoutputcommitter.marksuccessfuljobs", "false")
+            .config("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension")
+            .config(
+                "spark.sql.catalog.spark_catalog",
+                "org.apache.spark.sql.delta.catalog.DeltaCatalog",
+            )
+            .config("spark.jars.packages", "io.delta:delta-spark_2.12:3.3.1")
             .getOrCreate()
         )
 
         # Leitura do CSV
         logging.info("Iniciando leitura do CSV: %s", csv_file_path)
         df = spark.read.csv(csv_file_path, header=True, inferSchema=True)
+
+        # Renomear colunas usando sanitize_column_name
+        for old_name in df.columns:
+            df = df.withColumnRenamed(old_name, sanitize_column_name(old_name))
 
         # Processamento
         start_time = time.time()
@@ -102,8 +113,8 @@ def convert_csv_to_parquet(
             f"  - Tamanho CSV: {original_size / (1024**2):.2f} MB\n"
             f"  - Tamanho Parquet: {compressed_size / (1024**2):.2f} MB\n"
             f"  - Tempo total: {elapsed_time:.2f} segundos\n"
-            f"  - Taxa de compressão: {compression_ratio:.1f}x"
-            f"  - Partições: {n_partitions}"
+            f"  - Taxa de compressão: {compression_ratio:.1f}x\n"
+            f"  - Partições: {n_partitions}\n"
             f"  - Compressão: {compression}"
         )
 
