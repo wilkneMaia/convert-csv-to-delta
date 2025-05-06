@@ -1,7 +1,7 @@
 import logging
 
 from utils.config import CSV_PATH, DELTA_DIR
-from utils.convert_parquet_to_delta import convert_csv_to_delta
+from utils.convert_parquet_to_delta import convert_csv_to_parquet
 
 logging.basicConfig(level=logging.INFO)
 
@@ -11,9 +11,9 @@ def main():
 
         logging.info("Iniciando o processo de conversão de CSV para Delta")
 
-        convert_csv_to_delta(
+        convert_csv_to_parquet(
             csv_file_path=CSV_PATH,
-            delta_table_path=DELTA_DIR,
+            delta_table_dir=DELTA_DIR,
             compression="snappy",
             overwrite=True,
             n_partitions=1,
