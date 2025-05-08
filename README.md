@@ -55,40 +55,7 @@ Este projeto demonstra como converter grandes arquivos CSV de dados frios em tab
 
 ## 📂 Estrutura do Projeto
 
-.
-├── **pycache**
-│   └── pyspark.cpython-312.pyc
-├── app.py
-├── data
-│   ├── csv
-│   │   ├── central_west.csv
-│   │   ├── columns_description.csv
-│   │   ├── north.csv
-│   │   ├── northeast.csv
-│   │   ├── south.csv
-│   │   ├── southeast.csv
-│   │   └── stations.csv
-│   └── delta
-│       ├── _delta_log
-│       │   ├── 00000000000000000000.crc
-│       │   ├── 00000000000000000000.json
-│       │   └── _commits
-│       └── part-00000-430a3d82-1a95-4ce5-9ebd-81dafdfa6396-c000.snappy.parquet
-├── query_delta_table.ipynb
-├── requirements.txt
-└── utils
-    ├── **init**.py
-    ├── **pycache**
-    │   ├── **init**.cpython-312.pyc
-    │   ├── config.cpython-312.pyc
-    │   ├── convert_csv_to_parquet.cpython-312.pyc
-    │   ├── convert_parquet_to_delta.cpython-312.pyc
-    │   └── convert_parquet_to_table.cpython-312.pyc
-    ├── config.py
-    ├── convert_parquet_to_delta.py
-    └── data_loader.ipynb
-
-9 directories, 23 files
+![Comparativo CSV vs Delta Lake](/img/img_1.png)
 
 ---
 
